@@ -41,9 +41,6 @@ class System_Win : public System
     void PostGameShutdown() override
     {
     }
-    void Shutdown() override
-    {
-    }
     void DisplayMessageBox(const string& msg) override
     {
     }
