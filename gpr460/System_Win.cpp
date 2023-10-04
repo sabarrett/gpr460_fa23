@@ -47,6 +47,10 @@ class System_Win : public System
     void WriteToLogFile(const string& msg) override
     {
     }
+
+    void Shutdown() override
+    {
+    }
 };
 
 System* System::Create()

@@ -171,6 +171,7 @@
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="InheritanceFallsApart.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="System_Win.cpp" />
   </ItemGroup>

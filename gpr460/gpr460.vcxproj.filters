@@ -21,6 +21,9 @@
     <ClCompile Include="System_Win.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="InheritanceFallsApart.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="System.h">

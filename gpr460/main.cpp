@@ -4,58 +4,213 @@
 #include <SDL2/SDL.h>
 #include "System.h"
 
-// Add your System.h include file here
-struct String
+class Engine
 {
-    char*  buf;
-    size_t len;
-    size_t cap;
+public:
+    static Engine* Create()
+    {
+        if (instance == nullptr)
+        {
+            instance = new Engine();
+            return instance;
+        }
 
-    void push(char item);
+        // Only the main loop should be able to make
+        // and get instances!
+        return nullptr;
+    }
+
+    Engine()
+    {
+        const Uint8* currentKeys = SDL_GetKeyboardState(&numkeys);
+
+        keysLastFrame = new Uint8[numkeys];
+        keysThisFrame = new Uint8[numkeys];
+
+        memcpy(keysLastFrame, currentKeys, numkeys);
+        memcpy(keysThisFrame, currentKeys, numkeys);
+
+        // Same as this loop:
+        /*
+        for (int i = 0; i < numkeys; i++)
+        {
+            keysLastFrame[i] = currentKeys[i];
+            keysThisFrame[i] = currentKeys[i];
+        }
+        */
+    }
+
+    static int GetCurrentFrame();
+    static float Dt();
+    static int GetKey(int keycode);
+    static int GetKeyDown(int keycode);
+
+    void RunGameLoop(SDL_Renderer* renderer);
+
+private:
+    static Engine* instance;
+
+    Uint8* keysLastFrame;
+    Uint8* keysThisFrame;
+    int numkeys;
+    int frame;
+    float dt;
 };
 
-void String::push(char item)
+Engine* Engine::instance;
+
+int Engine::GetCurrentFrame() { return instance->frame; }
+
+float Engine::Dt() { return instance->dt; }
+
+int Engine::GetKey(int keycode)
 {
-    buf = new char[1024];
-    len++;
-    cap = 1024;
+    if (keycode < instance->numkeys)
+    {
+        return instance->keysThisFrame[keycode];
+    }
+
+    // Really, this is an error...
+    return -1;
 }
 
-int main(int argc, char* argv[])
+/*
+       Current Frame
+  A   B   C   D   E   F   G
+-------------------------------------
+| 1 | 0 | 1 | 1 | 0 | 0 | 0 | ....
+------------------------------------
+
+       Previous Frame
+  A   B   C   D   E   F   G
+-------------------------------------
+| 1 | 0 | 1 | 0 | 0 | 0 | 0 | ....
+------------------------------------
+
+=> D WAS PRESSED THIS FRAME!
+*/
+
+int Engine::GetKeyDown(int keycode)
 {
-    const int WIDTH = 640;
-    const int HEIGHT = 480;
-    SDL_Window* window = NULL;
-    SDL_Renderer* renderer = NULL;
+    if (keycode < instance->numkeys)
+    {
+        return !instance->keysLastFrame[keycode] && instance->keysThisFrame[keycode];
+    }
 
-    gpr460::System* system = gpr460::System::Create();
-    system->Initialize();
+    // Really, this is an error...
+    return -1;
+}
 
-    std::cout << "Hi there!\n";
+class PlayerComponent;
+class RectangleRenderComponent;
+class SinMovement;
 
-    system->WriteToLogFile("MyFile.txt");
+class GameObject
+{
+public:
+    void Update();
 
-    // Class note: You can use this to report memory leaks on exit:
-    //_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
-    //_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
+    PlayerComponent* playerComponent = nullptr;
+    RectangleRenderComponent* renderComponent = nullptr;
+    SinMovement* sinMovement = nullptr;
 
-    SDL_Init(SDL_INIT_VIDEO);
-    window = SDL_CreateWindow("SDL2 Test", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, SDL_WINDOW_SHOWN);
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    float x, y;
+};
 
-    int x = 0;
-    int frame = 0;
+class PlayerComponent
+{
+public:
 
+    PlayerComponent(GameObject* owner) : gameObject(owner) {}
+
+    void Update()
+    {
+        float movement = Engine::GetKey(SDL_SCANCODE_DOWN) - Engine::GetKey(SDL_SCANCODE_UP);
+        movement *= 25;
+
+        gameObject->y += movement * Engine::Dt();
+
+        if (Engine::GetKeyDown(SDL_SCANCODE_T))
+        {
+            std::cout << "T pressed this frame!\n";
+            gameObject->y = 50;
+            gameObject->x = 50;
+        }
+    }
+
+    GameObject* gameObject = nullptr;
+};
+
+class RectangleRenderComponent
+{
+public:
+    RectangleRenderComponent(GameObject* owner) : gameObject(owner), height(50), width(50) {}
+
+    void Render(SDL_Renderer* renderer)
+    {
+        SDL_Rect r = {
+            gameObject->x,
+            gameObject->y,
+            width,
+            height
+        };
+
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, SDL_ALPHA_OPAQUE);
+        SDL_RenderFillRect(renderer, &r);
+    }
+
+    GameObject* gameObject = nullptr;
+    float width, height;
+};
+
+class SinMovement
+{
+public:
+    SinMovement(GameObject* owner) : gameObject(owner) {}
+
+    void Update()
+    {
+        gameObject->x = (SDL_sinf(Engine::GetCurrentFrame() / 10.0f) * 100) + 200;
+    }
+
+    GameObject* gameObject = nullptr;
+
+};
+
+void GameObject::Update()
+{
+    if (playerComponent != nullptr) playerComponent->Update();
+    if (sinMovement != nullptr) sinMovement->Update();
+}
+
+
+void Engine::RunGameLoop(SDL_Renderer* renderer)
+{
     SDL_Event event;
     bool quit = false;
     Uint32 frameStart = SDL_GetTicks64();
 
-#ifdef __EMSCRIPTEN__
-    // do the loop one kind of way
-    std::cout << "I'm the emscripten loop! Wee!!\n";
+    const int NUM_GAMEOBJECTS = 2;
+    GameObject gameObjects[NUM_GAMEOBJECTS];
 
-#else
-    // do it our cool way
+    // Initialize player object
+    {
+        GameObject& player = gameObjects[0];
+        // Heap allocations! Have to clean these up sometime :/
+        player.playerComponent = new PlayerComponent(&player);
+        player.renderComponent = new RectangleRenderComponent(&player);
+        player.x = 100;
+        player.y = 100;
+    }
+
+    // Initialize moving rectangle
+    {
+        GameObject& movingRectangle = gameObjects[1];
+        movingRectangle.sinMovement = new SinMovement(&movingRectangle);
+        movingRectangle.renderComponent = new RectangleRenderComponent(&movingRectangle);
+        movingRectangle.x = 200;
+        movingRectangle.y = 10;
+    }
 
     while (!quit)
     {
@@ -70,12 +225,6 @@ int main(int argc, char* argv[])
             {
                 // Don't delete this leak -- it will be used
                 //    to check your 
-                int* intentionalLeak = DBG_NEW int[32];
-                if (event.key.keysym.sym == SDLK_k)
-                {
-                    system->DisplayMessageBox("The 'K' key was pressed!");
-                    system->WriteToLogFile("The 'K' key was pressed!");
-                }
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                 {
                     quit = true;
@@ -85,25 +234,65 @@ int main(int argc, char* argv[])
 
         if (SDL_GetTicks64() - frameStart >= 16)
         {
-            frame++;
-            frameStart = SDL_GetTicks64();
-            x = (SDL_sinf(frame / 10.0f) * 100) + 200;
+            memcpy(keysThisFrame, SDL_GetKeyboardState(NULL), numkeys);
 
-            SDL_Rect r = {
-                x,
-                100,
-                50,
-                50
-            };
+            frame++;
+
+            dt = (SDL_GetTicks64() - frameStart) / 1000.0f;
+
+            frameStart = SDL_GetTicks64();
+
+            for (int i = 0; i < NUM_GAMEOBJECTS; i++)
+            {
+                gameObjects[i].Update();
+            }
 
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
             SDL_RenderClear(renderer);
-            SDL_SetRenderDrawColor(renderer, 255, 0, 0, SDL_ALPHA_OPAQUE);
-            SDL_RenderFillRect(renderer, &r);
+
+            for (int i = 0; i < NUM_GAMEOBJECTS; i++)
+            {
+                if (gameObjects[i].renderComponent != nullptr)
+                {
+                    gameObjects[i].renderComponent->Render(renderer);
+                }
+            }
+
             SDL_RenderPresent(renderer);
+
+            // Switch input buffers
+            {
+                Uint8* tmp = keysThisFrame;
+                keysThisFrame = keysLastFrame;
+                keysLastFrame = tmp;
+            }
         }
     }
-#endif
+}
+
+int main(int argc, char* argv[])
+{
+    const int WIDTH = 640;
+    const int HEIGHT = 480;
+    SDL_Window* window = NULL;
+    SDL_Renderer* renderer = NULL;
+
+    gpr460::System* system = gpr460::System::Create();
+
+    // Class note: You can use this to report memory leaks on exit:
+    //_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+    //_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
+
+    SDL_Init(SDL_INIT_VIDEO);
+    window = SDL_CreateWindow("SDL2 Test", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, SDL_WINDOW_SHOWN);
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+
+    int x = 0;
+    int frame = 0;
+
+    Engine* instance = Engine::Create();
+
+    instance->RunGameLoop(renderer);
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
