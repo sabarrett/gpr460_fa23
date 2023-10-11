@@ -3,6 +3,7 @@
 #include <iostream>
 #include <SDL2/SDL.h>
 #include "System.h"
+#include <cassert>
 
 class Engine
 {
@@ -121,29 +122,43 @@ class PlayerComponent
 {
 public:
 
-    PlayerComponent(GameObject* owner) : gameObject(owner) {}
+    PlayerComponent() : gameObject(nullptr), speed(25), xTeleportDestination(50), yTeleportDestination(50) {}
+
+    PlayerComponent(GameObject* owner) : gameObject(owner), speed(25), xTeleportDestination(50), yTeleportDestination(50) {}
 
     void Update()
     {
         float movement = Engine::GetKey(SDL_SCANCODE_DOWN) - Engine::GetKey(SDL_SCANCODE_UP);
-        movement *= 25;
+        movement *= speed;
 
         gameObject->y += movement * Engine::Dt();
 
         if (Engine::GetKeyDown(SDL_SCANCODE_T))
         {
             std::cout << "T pressed this frame!\n";
-            gameObject->y = 50;
-            gameObject->x = 50;
+            gameObject->x = xTeleportDestination;
+            gameObject->y = yTeleportDestination;
         }
     }
 
+    struct Data
+    {
+        float speed;
+        float xTeleportDestination;
+        float yTeleportDestination;
+    };
+
+    float speed;
+    float xTeleportDestination;
+    float yTeleportDestination;
     GameObject* gameObject = nullptr;
 };
 
 class RectangleRenderComponent
 {
 public:
+    RectangleRenderComponent() : gameObject(nullptr), height(50), width(50) {}
+
     RectangleRenderComponent(GameObject* owner) : gameObject(owner), height(50), width(50) {}
 
     void Render(SDL_Renderer* renderer)
@@ -166,6 +181,8 @@ public:
 class SinMovement
 {
 public:
+    SinMovement() : gameObject(nullptr) {}
+
     SinMovement(GameObject* owner) : gameObject(owner) {}
 
     void Update()
@@ -183,6 +200,125 @@ void GameObject::Update()
     if (sinMovement != nullptr) sinMovement->Update();
 }
 
+/*
+// Comparison of AoS vs. SoA ------------------
+struct GameObjectStruct {
+    RectangleRenderComponent c;
+    SinMovement s;
+};
+
+// Array-of-structures
+GameObjectStruct objects[200];
+
+// Structure-of-Arrays
+struct GameObjectArray
+{
+    RectangleRenderComponent cs[200];
+    SinMovement s[200];
+};
+
+GameObjectArray gameObjects;
+// -----------------------------------------------
+*/
+
+const size_t MAX_GAMEOBJECTS = 200;
+
+// Untested but plausible free list implementation
+class PlayerPool
+{
+    PlayerPool()
+    {
+        for (int i = 0; i < MAX_GAMEOBJECTS - 1; i++)
+        {
+            components[i].next = &components[i + 1];
+        }
+        components[MAX_GAMEOBJECTS - 1].next = nullptr;
+        first = &components[0];
+    }
+
+    PlayerComponent::Data* New(GameObject* go)
+    {
+        PlayerComponent::Data* toReturn = &first->component;
+        first = first->next;
+        return toReturn;
+    }
+
+    void Delete(PlayerComponent::Data* toDelete)
+    {
+        Node* tmp = first;
+        first = (Node*)toDelete;
+        first->next = tmp;
+    }
+
+private:
+    union Node
+    {
+        PlayerComponent::Data component;
+        Node* next;
+    };
+    Node components[MAX_GAMEOBJECTS];
+
+    Node* first;
+};
+
+template<typename T>
+class ComponentPool
+{
+public:
+    ComponentPool()
+    {
+        for (int i = 0; i < MAX_GAMEOBJECTS; i++)
+        {
+            isActive[i] = false;
+        }
+    }
+
+    void Update()
+    {
+        for (int i = 0; i < MAX_GAMEOBJECTS; i++)
+        {
+            if (isActive[i])
+            {
+                components[i].Update();
+            }
+        }
+    }
+
+    void Render(SDL_Renderer* renderer)
+    {
+
+        for (int i = 0; i < MAX_GAMEOBJECTS; i++)
+        {
+            if (isActive[i])
+            {
+                components[i].Render(renderer);
+            }
+        }
+    }
+
+    T* New(GameObject* go)
+    {
+        for (int i = 0; i < MAX_GAMEOBJECTS; i++)
+        {
+            if (!isActive[i])
+            {
+                T* next = &components[i];
+                next->gameObject = go;
+                isActive[i] = true;
+                return next;
+            }
+        }
+
+        // Ran out of components to return :(
+        assert(false);
+    }
+
+    // You implement Delete ;)
+
+public:
+    T components[MAX_GAMEOBJECTS];
+    bool isActive[MAX_GAMEOBJECTS];
+};
 
 void Engine::RunGameLoop(SDL_Renderer* renderer)
 {
@@ -190,15 +326,17 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
     bool quit = false;
     Uint32 frameStart = SDL_GetTicks64();
 
-    const int NUM_GAMEOBJECTS = 2;
-    GameObject gameObjects[NUM_GAMEOBJECTS];
+    GameObject gameObjects[MAX_GAMEOBJECTS];
+    ComponentPool<RectangleRenderComponent> renderers;
+    ComponentPool<PlayerComponent> playerComponents;
+    ComponentPool<SinMovement> sinComponents;
 
     // Initialize player object
     {
         GameObject& player = gameObjects[0];
         // Heap allocations! Have to clean these up sometime :/
-        player.playerComponent = new PlayerComponent(&player);
-        player.renderComponent = new RectangleRenderComponent(&player);
+        player.playerComponent = playerComponents.New(&player);
+        player.renderComponent = renderers.New(&player);
         player.x = 100;
         player.y = 100;
     }
@@ -206,8 +344,8 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
     // Initialize moving rectangle
     {
         GameObject& movingRectangle = gameObjects[1];
-        movingRectangle.sinMovement = new SinMovement(&movingRectangle);
-        movingRectangle.renderComponent = new RectangleRenderComponent(&movingRectangle);
+        movingRectangle.sinMovement = sinComponents.New(&movingRectangle);
+        movingRectangle.renderComponent = renderers.New(&movingRectangle);
         movingRectangle.x = 200;
         movingRectangle.y = 10;
     }
@@ -242,21 +380,15 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
 
             frameStart = SDL_GetTicks64();
 
-            for (int i = 0; i < NUM_GAMEOBJECTS; i++)
-            {
-                gameObjects[i].Update();
-            }
+            // Update each component type
+            playerComponents.Update();
+
+            sinComponents.Update();
 
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
             SDL_RenderClear(renderer);
 
-            for (int i = 0; i < NUM_GAMEOBJECTS; i++)
-            {
-                if (gameObjects[i].renderComponent != nullptr)
-                {
-                    gameObjects[i].renderComponent->Render(renderer);
-                }
-            }
+            renderers.Render(renderer);
 
             SDL_RenderPresent(renderer);
 
