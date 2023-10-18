@@ -37,8 +37,13 @@ public:
 		return nullptr;
 	}
 
+	void PopTo(void* ptr)
+	{
+		// Make sure you check that ptr is actually
+		// in the stack before setting the head!
+	}
+
 	void Clear();
-	// void PopTo(void* object);
 
 private:
 	char* buffer;
