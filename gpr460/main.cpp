@@ -3,6 +3,7 @@
 #include <iostream>
 #include <SDL2/SDL.h>
 #include "System.h"
+#include "StackAllocator.h"
 #include <cassert>
 
 class Engine
@@ -320,6 +321,33 @@ public:
     bool isActive[MAX_GAMEOBJECTS];
 };
 
+void StackAllocatorExample()
+{
+    StackAllocator levelAllocator(5);
+
+    int* int1 = levelAllocator.New<int>();
+    *int1 = 100;
+    int* int2 = levelAllocator.New<int>();
+    if (int2 == nullptr)
+    {
+        std::cout << "Allocation failed (as expected)\n";
+    }
+    char* letter = levelAllocator.New<char>();
+    if (letter == nullptr)
+    {
+        std::cout << "Letter allocation failed unexpectedly\n";
+    }
+    else
+    {
+        *letter = 'a';
+    }
+
+    if (int1 != nullptr && letter != nullptr)
+    {
+        std::cout << "int1: " << *int1 << "  letter:  " << *letter;
+    }
+}
+
 void Engine::RunGameLoop(SDL_Renderer* renderer)
 {
     SDL_Event event;
@@ -330,6 +358,8 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
     ComponentPool<RectangleRenderComponent> renderers;
     ComponentPool<PlayerComponent> playerComponents;
     ComponentPool<SinMovement> sinComponents;
+
+    //GameObject* gameObjects = levelAllocator.New()
 
     // Initialize player object
     {

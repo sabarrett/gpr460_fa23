@@ -176,6 +176,7 @@
     <ClCompile Include="System_Win.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="StackAllocator.h" />
     <ClInclude Include="System.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
