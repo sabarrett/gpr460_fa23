@@ -5,6 +5,22 @@ class StackAllocator
 {
 public:
 	StackAllocator(size_t capacity=65536);
+
+	template <typename T>
+	T* StartArray()
+	{
+		return (T*)head;
+	}
+
+	template <typename T>
+	T* PushArray()
+	{
+		return New<T>();
+	}
+
+	// Note -- it is possible to modify this template to
+	//         call any arbitrary constructor, not just
+	//         the default constructor
 	template<typename T>
 	T* New()
 	{
@@ -26,6 +42,9 @@ public:
 
 		char* oldHead = head;
 		head += size;
+
+		// Placement New
+		new (oldHead) T();
 		return (T*)oldHead;
 	}
 
@@ -44,6 +63,11 @@ public:
 	}
 
 	void Clear();
+
+	void* Data()
+	{
+		return buffer;
+	}
 
 private:
 	char* buffer;

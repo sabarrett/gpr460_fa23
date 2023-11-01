@@ -321,6 +321,31 @@ public:
     bool isActive[MAX_GAMEOBJECTS];
 };
 
+class ToBeAllocated
+{
+public:
+    ToBeAllocated()
+    {
+        std::cout << "I've been allocated at address " << this << std::endl;
+    }
+
+    virtual void Print()
+    {
+        std::cout << "ToBeAllocated::Print()\n";
+    }
+};
+
+class ToBeAllocatedChild : public ToBeAllocated
+{
+public:
+    ToBeAllocatedChild() {}
+
+    void Print() override
+    {
+        std::cout << "Child::Print() -- Polymorphism works!\n";
+    }
+};
+
 void StackAllocatorExample()
 {
     StackAllocator levelAllocator(5);
@@ -344,7 +369,48 @@ void StackAllocatorExample()
 
     if (int1 != nullptr && letter != nullptr)
     {
-        std::cout << "int1: " << *int1 << "  letter:  " << *letter;
+        std::cout << "int1: " << *int1 << "  letter:  " << *letter << std::endl;
+    }
+
+    levelAllocator.Clear();
+
+    ToBeAllocated* dummy = levelAllocator.New<ToBeAllocatedChild>();
+    std::cout << "levelAllocator starts at " << levelAllocator.Data() << std::endl;
+    dummy->Print();
+}
+
+void StackPolymorphismExample()
+{
+    StackAllocator levelAllocator;
+
+    ToBeAllocated* dummy = levelAllocator.New<ToBeAllocatedChild>();
+    std::cout << "levelAllocator starts at " << levelAllocator.Data() << std::endl;
+    dummy->Print();
+}
+
+void ArrayAllocationWithStack()
+{
+    StackAllocator frameAllocator;
+
+    int* array = frameAllocator.StartArray<int>();
+    size_t arrayLen = 0;
+    srand(time(NULL));
+
+    for (int i = 0; i < 100; i++)
+    {
+        int dieRoll = rand() % 100;
+        if (dieRoll < 50)
+        {
+            int* arraySlot = frameAllocator.PushArray<int>();
+            *arraySlot = dieRoll;
+            arrayLen++;
+        }
+    }
+
+    std::cout << "Allocated " << arrayLen << " integers:\n\n";
+    for (int i = 0; i < arrayLen; i++)
+    {
+        std::cout << array[i] << std::endl;
     }
 }
 
@@ -358,6 +424,11 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
     ComponentPool<RectangleRenderComponent> renderers;
     ComponentPool<PlayerComponent> playerComponents;
     ComponentPool<SinMovement> sinComponents;
+
+    ArrayAllocationWithStack();
+    return;
+
+    //StackPolymorphismExample();
 
     //GameObject* gameObjects = levelAllocator.New()
 
