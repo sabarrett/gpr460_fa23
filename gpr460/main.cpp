@@ -4,6 +4,8 @@
 #include <SDL2/SDL.h>
 #include "System.h"
 #include "StackAllocator.h"
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 #include <cassert>
 
 class Engine
@@ -414,6 +416,52 @@ void ArrayAllocationWithStack()
     }
 }
 
+void VirtualAllocExamples()
+{
+    // https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc
+    SYSTEM_INFO info;
+    GetSystemInfo(&info);
+    size_t page_size = info.dwPageSize;
+
+
+    // Can use VirtualAlloc to allocate a specific pointer, if we want.
+    char* myPointer = (char*)0x000001CDEF6C00ab;
+
+    // Can allocate Virtual Memory and bind it to Physical Memory all at once
+    //    with MEM_RESERVE | MEM_COMMIT, or can just reserve memory (which is very cheap!)
+    //    and then commit pages individually later.
+    void* page = VirtualAlloc(myPointer, page_size * 20, MEM_RESERVE, PAGE_NOACCESS);
+    assert(page != nullptr);
+
+    // Commit two pages of the 20 pages we reserved.
+    VirtualAlloc(page, page_size, MEM_COMMIT, PAGE_READWRITE);
+    VirtualAlloc((char*)page + page_size, page_size, MEM_COMMIT, PAGE_READWRITE);
+
+    // Can decommit a page, unbinding it from physical memory but keeping the virtual
+    // page still allocated (and thus, committable in the future).
+    VirtualFree((char*)page + page_size, page_size, MEM_DECOMMIT);
+
+    // If we instead wanted to decommit the page and release the virtual memory (so it
+    // can be reallocated by another call to VirtualAlloc), we would instead do:
+    // VirtualFree((char*)page + page_size, 0, MEM_RELEASE);
+
+    VirtualAlloc((char*)page + page_size, page_size, MEM_COMMIT, PAGE_READWRITE);
+
+    // Read into the third page -- this causes a crash (read access violation)
+    for (int i = 0; i < 2 * (page_size / sizeof(int)); i++)
+    {
+        int* pageAsInts = (int*)page;
+        std::cout << pageAsInts[i] << std::endl;
+    }
+
+    std::cout << "page: " << page << std::endl;
+    std::cout << "myPointer: " << (void*)myPointer << std::endl;
+    //myPointer = (char*)page;
+    *myPointer = 'h';
+    *(myPointer + 1) = 'i';
+    std::cout << *myPointer << *(myPointer + 1) << std::endl;
+}
+
 void Engine::RunGameLoop(SDL_Renderer* renderer)
 {
     SDL_Event event;
@@ -425,7 +473,7 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
     ComponentPool<PlayerComponent> playerComponents;
     ComponentPool<SinMovement> sinComponents;
 
-    ArrayAllocationWithStack();
+    VirtualAllocExamples();
     return;
 
     //StackPolymorphismExample();
