@@ -217,6 +217,7 @@ public:
 class Engine
 {
 public:
+
     static Engine* Create()
     {
         if (instance == nullptr)
@@ -255,6 +256,8 @@ public:
     static int GetKey(int keycode);
     static int GetKeyDown(int keycode);
     static void MovePlayer(float x, float y);
+    static GameObject* Spawn(float x, float y);
+    static RectangleRenderComponent* AddRenderer(GameObject* go);
 
     void InitLua();
     void CallLuaUpdate();
@@ -318,6 +321,62 @@ int LuaC_MovePlayer(lua_State* L)
     Engine::MovePlayer(x, y);
 
     return 0;
+}
+
+int LuaC_Spawn(lua_State* L)
+{
+    lua_Number y = lua_tonumber(L, -1);
+    lua_Number x = lua_tonumber(L, -2);
+
+    GameObject* go = Engine::Spawn(x, y);
+
+    lua_pushlightuserdata(L, go);
+
+    return 1;
+}
+
+int LuaC_AddRenderComponent(lua_State* L)
+{
+    GameObject* go = (GameObject*)lua_touserdata(L, -1);
+
+    Engine::AddRenderer(go);
+
+    return 0;
+}
+
+int LuaC_GetKeyDown(lua_State* L)
+{
+    // Takes one argument from lua
+    lua_Integer key = lua_tointeger(L, -1);
+
+    // Returns an argument to lua
+    lua_pushboolean(L, Engine::GetKeyDown(key));
+
+    return 1;
+}
+
+RectangleRenderComponent* Engine::AddRenderer(GameObject* go)
+{
+    go->renderComponent = instance->renderers.New(go);
+
+    std::cout << "Added render component\n";
+
+    return go->renderComponent;
+}
+
+GameObject* Engine::Spawn(float x, float y)
+{
+    static int next_id = 0;
+
+    assert(next_id < MAX_GAMEOBJECTS);
+
+    GameObject* go = &instance->gameObjects[next_id++];
+    go->x = x;
+    go->y = y;
+
+    std::cout << "Spawned object at (" << go->x << ", " << go->y << ")\n";
+
+    return go;
 }
 
 void Engine::MovePlayer(float x, float y)
@@ -405,6 +464,9 @@ void Engine::InitLua()
     lua_register(L, "get_key", LuaC_GetKey);
     lua_register(L, "get_dt", LuaC_GetDt);
     lua_register(L, "move_player", LuaC_MovePlayer);
+    lua_register(L, "spawn", LuaC_Spawn);
+    lua_register(L, "add_render_component", LuaC_AddRenderComponent);
+    lua_register(L, "get_key_down", LuaC_GetKeyDown);
 
     if (luaL_dofile(L, "init.lua") == 1)
     {
@@ -617,7 +679,7 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
 
     // Initialize player object
     {
-        GameObject& player = gameObjects[0];
+        GameObject& player = *Spawn(0, 0);
         player.playerComponent = playerComponents.New(&player);
         player.renderComponent = renderers.New(&player);
         player.x = 100;
@@ -626,7 +688,7 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
 
     // Initialize moving rectangle
     {
-        GameObject& movingRectangle = gameObjects[1];
+        GameObject& movingRectangle = *Spawn(0, 0);
         movingRectangle.sinMovement = sinComponents.New(&movingRectangle);
         movingRectangle.renderComponent = renderers.New(&movingRectangle);
         movingRectangle.x = 200;
