@@ -11,209 +11,6 @@
 
 #include "lua.hpp"
 
-
-class Engine
-{
-public:
-    static Engine* Create()
-    {
-        if (instance == nullptr)
-        {
-            instance = new Engine();
-            return instance;
-        }
-
-        // Only the main loop should be able to make
-        // and get instances!
-        return nullptr;
-    }
-
-    Engine()
-    {
-        const Uint8* currentKeys = SDL_GetKeyboardState(&numkeys);
-
-        keysLastFrame = new Uint8[numkeys];
-        keysThisFrame = new Uint8[numkeys];
-
-        memcpy(keysLastFrame, currentKeys, numkeys);
-        memcpy(keysThisFrame, currentKeys, numkeys);
-
-        // Same as this loop:
-        /*
-        for (int i = 0; i < numkeys; i++)
-        {
-            keysLastFrame[i] = currentKeys[i];
-            keysThisFrame[i] = currentKeys[i];
-        }
-        */
-    }
-
-    static int GetCurrentFrame();
-    static float Dt();
-    static int GetKey(int keycode);
-    static int GetKeyDown(int keycode);
-
-    void InitLua();
-    void CallLuaUpdate();
-    void RunGameLoop(SDL_Renderer* renderer);
-
-private:
-    static Engine* instance;
-
-    lua_State* L;
-
-    Uint8* keysLastFrame;
-    Uint8* keysThisFrame;
-    int numkeys;
-    int frame;
-    float dt;
-};
-
-Engine* Engine::instance;
-
-
-
-int LuaC_GetCurrentFrame(lua_State* L)
-{
-    // To return something to lua, push it onto the stack
-    lua_pushinteger(L, Engine::GetCurrentFrame());
-
-    // Then, return the number of items that you've returned.
-    // In this case, we returned a single integer, so we
-    // return 1.
-
-    return 1;
-}
-
-// Needed to remove "luac.c" and "lua.c"
-void Engine::InitLua()
-{
-    // First, we create the Lua interpreter
-    L = luaL_newstate();
-
-    // Make sure our interpreter could be created successfully
-    if (L == nullptr)
-    {
-        std::cerr << "Could not create lua interpreter\n";
-        return;
-    }
-
-    std::cout << "Successfully created lua interpreter\n";
-
-    // Set up standard libraries
-    luaL_openlibs(L);
-
-    // Now, we have a lua state and can ask it to do things!
-    if (luaL_dostring(L, "print(10 + 5)") == 1)
-    {
-        std::cerr << "Error calling luaL_dostring\n";
-    }
-
-    // Lua reads a string like "print(10 + 5)" and parses it.
-    // It turns it into a tree like:
-    // 
-    //        call_fn
-    //        /     \
-    //   "print"     +
-    //              / \
-    //            10   5
-
-    // Then, it executes the tree:
-    //    Add 10 and 5. Store that somewhere.
-    //    Call print. Pass it the stored value as an argument.
-
-    // When we invoke Lua, we'd like to skip the parsing step and go
-    // straight to the instructions. We want to write C(++) code that
-    // tells Lua to, e.g., add 10 and 5 and then call print.
-
-
-    lua_getglobal(L, "print");
-    // -> [ fn_print ]
-
-    lua_pushnumber(L, 10);
-    // -> [ 10, fn_print ]
-
-    lua_pushnumber(L, 5);
-    // -> [ 5, 10, fn_print ]
-
-    lua_arith(L, LUA_OPADD);
-    // Pop the top two values off the stack and adds them together.
-    // Pushes the result back onto the stack.
-    // -> [ 15, fn_print ]
-
-    // args:
-    //    Lua State
-    //    Number of parameters to pass to function (consumes parameters from the top)
-    //    Number of return values expected by function
-    //    Where in the stack is the function to call
-
-    // -> [ 15, fn_print ]
-    //      -1    -2
-    // Want to call function at location -2
-    // Want to pass 1 paramter (the thing on the top of the stack
-    // Print doesn't return a value so we pass 0 for the third argument
-    lua_pcall(L, 1, 0, -2);
-
-    std::fstream lua_file("init.lua");
-    std::string line;
-    std::getline(lua_file, line);
-    std::cout << "Read " << line << " from init.lua\n";
-
-    lua_CFunction getCurrentFrame = LuaC_GetCurrentFrame;
-
-    lua_register(L, "get_current_frame", getCurrentFrame);
-
-    luaL_dofile(L, "init.lua");
-}
-
-void Engine::CallLuaUpdate()
-{
-    lua_getglobal(L, "Update");
-    lua_pcall(L, 0, 0, -1);
-}
-
-int Engine::GetCurrentFrame() { return instance->frame; }
-
-float Engine::Dt() { return instance->dt; }
-
-int Engine::GetKey(int keycode)
-{
-    if (keycode < instance->numkeys)
-    {
-        return instance->keysThisFrame[keycode];
-    }
-
-    // Really, this is an error...
-    return -1;
-}
-
-/*
-       Current Frame
-  A   B   C   D   E   F   G
--------------------------------------
-| 1 | 0 | 1 | 1 | 0 | 0 | 0 | ....
-------------------------------------
-
-       Previous Frame
-  A   B   C   D   E   F   G
--------------------------------------
-| 1 | 0 | 1 | 0 | 0 | 0 | 0 | ....
-------------------------------------
-
-=> D WAS PRESSED THIS FRAME!
-*/
-
-int Engine::GetKeyDown(int keycode)
-{
-    if (keycode < instance->numkeys)
-    {
-        return !instance->keysLastFrame[keycode] && instance->keysThisFrame[keycode];
-    }
-
-    // Really, this is an error...
-    return -1;
-}
-
 class PlayerComponent;
 class RectangleRenderComponent;
 class SinMovement;
@@ -238,20 +35,7 @@ public:
 
     PlayerComponent(GameObject* owner) : gameObject(owner), speed(25), xTeleportDestination(50), yTeleportDestination(50) {}
 
-    void Update()
-    {
-        float movement = Engine::GetKey(SDL_SCANCODE_DOWN) - Engine::GetKey(SDL_SCANCODE_UP);
-        movement *= speed;
-
-        gameObject->y += movement * Engine::Dt();
-
-        if (Engine::GetKeyDown(SDL_SCANCODE_T))
-        {
-            std::cout << "T pressed this frame!\n";
-            gameObject->x = xTeleportDestination;
-            gameObject->y = yTeleportDestination;
-        }
-    }
+    void Update();
 
     struct Data
     {
@@ -297,10 +81,7 @@ public:
 
     SinMovement(GameObject* owner) : gameObject(owner) {}
 
-    void Update()
-    {
-        gameObject->x = (SDL_sinf(Engine::GetCurrentFrame() / 10.0f) * 100) + 200;
-    }
+    void Update();
 
     GameObject* gameObject = nullptr;
 
@@ -431,6 +212,257 @@ public:
     T components[MAX_GAMEOBJECTS];
     bool isActive[MAX_GAMEOBJECTS];
 };
+
+
+class Engine
+{
+public:
+    static Engine* Create()
+    {
+        if (instance == nullptr)
+        {
+            instance = new Engine();
+            return instance;
+        }
+
+        // Only the main loop should be able to make
+        // and get instances!
+        return nullptr;
+    }
+
+    Engine()
+    {
+        const Uint8* currentKeys = SDL_GetKeyboardState(&numkeys);
+
+        keysLastFrame = new Uint8[numkeys];
+        keysThisFrame = new Uint8[numkeys];
+
+        memcpy(keysLastFrame, currentKeys, numkeys);
+        memcpy(keysThisFrame, currentKeys, numkeys);
+
+        // Same as this loop:
+        /*
+        for (int i = 0; i < numkeys; i++)
+        {
+            keysLastFrame[i] = currentKeys[i];
+            keysThisFrame[i] = currentKeys[i];
+        }
+        */
+    }
+
+    static int GetCurrentFrame();
+    static float Dt();
+    static int GetKey(int keycode);
+    static int GetKeyDown(int keycode);
+    static void MovePlayer(float x, float y);
+
+    void InitLua();
+    void CallLuaUpdate();
+    void RunGameLoop(SDL_Renderer* renderer);
+
+private:
+    static Engine* instance;
+
+    lua_State* L;
+
+    Uint8* keysLastFrame;
+    Uint8* keysThisFrame;
+    int numkeys;
+    int frame;
+    float dt;
+
+
+    GameObject gameObjects[MAX_GAMEOBJECTS];
+    ComponentPool<RectangleRenderComponent> renderers;
+    ComponentPool<PlayerComponent> playerComponents;
+    ComponentPool<SinMovement> sinComponents;
+};
+
+Engine* Engine::instance;
+
+int LuaC_GetCurrentFrame(lua_State* L)
+{
+    // To return something to lua, push it onto the stack
+    lua_pushinteger(L, Engine::GetCurrentFrame());
+
+    // Then, return the number of items that you've returned.
+    // In this case, we returned a single integer, so we
+    // return 1.
+
+    return 1;
+}
+
+int LuaC_GetKey(lua_State* L)
+{
+    // Takes one argument from lua
+    lua_Integer key = lua_tointeger(L, -1);
+
+    // Returns an argument to lua
+    lua_pushboolean(L, Engine::GetKey(key));
+
+    return 1;
+}
+
+int LuaC_GetDt(lua_State* L)
+{
+    lua_pushnumber(L, Engine::Dt());
+
+    return 1;
+}
+
+int LuaC_MovePlayer(lua_State* L)
+{
+    lua_Number y = lua_tonumber(L, -1);
+    lua_Number x = lua_tonumber(L, -2);
+
+    Engine::MovePlayer(x, y);
+
+    return 0;
+}
+
+void Engine::MovePlayer(float x, float y)
+{
+    // Cheating here -- just assuming GO[0]
+    // is alive and is the player
+
+    GameObject& player = instance->gameObjects[0];
+    player.x += x;
+    player.y += y;
+}
+
+// Needed to remove "luac.c" and "lua.c"
+void Engine::InitLua()
+{
+    // First, we create the Lua interpreter
+    L = luaL_newstate();
+
+    // Make sure our interpreter could be created successfully
+    if (L == nullptr)
+    {
+        std::cerr << "Could not create lua interpreter\n";
+        return;
+    }
+
+    std::cout << "Successfully created lua interpreter\n";
+
+    // Set up standard libraries
+    luaL_openlibs(L);
+
+    // Now, we have a lua state and can ask it to do things!
+    if (luaL_dostring(L, "print(10 + 5)") == 1)
+    {
+        std::cerr << "Error calling luaL_dostring\n";
+    }
+
+    // Lua reads a string like "print(10 + 5)" and parses it.
+    // It turns it into a tree like:
+    // 
+    //        call_fn
+    //        /     \
+    //   "print"     +
+    //              / \
+    //            10   5
+
+    // Then, it executes the tree:
+    //    Add 10 and 5. Store that somewhere.
+    //    Call print. Pass it the stored value as an argument.
+
+    // When we invoke Lua, we'd like to skip the parsing step and go
+    // straight to the instructions. We want to write C(++) code that
+    // tells Lua to, e.g., add 10 and 5 and then call print.
+
+
+    lua_getglobal(L, "print");
+    // -> [ fn_print ]
+
+    lua_pushnumber(L, 10);
+    // -> [ 10, fn_print ]
+
+    lua_pushnumber(L, 5);
+    // -> [ 5, 10, fn_print ]
+
+    lua_arith(L, LUA_OPADD);
+    // Pop the top two values off the stack and adds them together.
+    // Pushes the result back onto the stack.
+    // -> [ 15, fn_print ]
+
+    // args:
+    //    Lua State
+    //    Number of parameters to pass to function (consumes parameters from the top)
+    //    Number of return values expected by function
+    //    Where in the stack is the function to call
+
+    // -> [ 15, fn_print ]
+    //      -1    -2
+    // Want to call function at location -2
+    // Want to pass 1 paramter (the thing on the top of the stack
+    // Print doesn't return a value so we pass 0 for the third argument
+    lua_pcall(L, 1, 0, -2);
+
+    lua_CFunction getCurrentFrame = LuaC_GetCurrentFrame;
+
+    lua_register(L, "get_current_frame", getCurrentFrame);
+    lua_register(L, "get_key", LuaC_GetKey);
+    lua_register(L, "get_dt", LuaC_GetDt);
+    lua_register(L, "move_player", LuaC_MovePlayer);
+
+    if (luaL_dofile(L, "init.lua") == 1)
+    {
+        std::cerr << "Error reading from init.lua.\n";
+        std::cerr << lua_tostring(L, -1) << std::endl;
+    }
+}
+
+void Engine::CallLuaUpdate()
+{
+    lua_getglobal(L, "Update");
+    lua_pcall(L, 0, 0, -1);
+}
+
+int Engine::GetCurrentFrame() { return instance->frame; }
+
+float Engine::Dt() { return instance->dt; }
+
+int Engine::GetKey(int keycode)
+{
+    if (keycode < instance->numkeys)
+    {
+        return instance->keysThisFrame[keycode];
+    }
+
+    // Really, this is an error...
+    return -1;
+}
+
+/*
+       Current Frame
+  A   B   C   D   E   F   G
+-------------------------------------
+| 1 | 0 | 1 | 1 | 0 | 0 | 0 | ....
+------------------------------------
+
+       Previous Frame
+  A   B   C   D   E   F   G
+-------------------------------------
+| 1 | 0 | 1 | 0 | 0 | 0 | 0 | ....
+------------------------------------
+
+=> D WAS PRESSED THIS FRAME!
+*/
+
+int Engine::GetKeyDown(int keycode)
+{
+    if (keycode < instance->numkeys)
+    {
+        return !instance->keysLastFrame[keycode] && instance->keysThisFrame[keycode];
+    }
+
+    // Really, this is an error...
+    return -1;
+}
+
+
+
 
 class ToBeAllocated
 {
@@ -579,11 +611,6 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
     bool quit = false;
     Uint32 frameStart = SDL_GetTicks64();
 
-    GameObject gameObjects[MAX_GAMEOBJECTS];
-    ComponentPool<RectangleRenderComponent> renderers;
-    ComponentPool<PlayerComponent> playerComponents;
-    ComponentPool<SinMovement> sinComponents;
-
     //StackPolymorphismExample();
 
     //GameObject* gameObjects = levelAllocator.New()
@@ -656,6 +683,21 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
             }
         }
     }
+}
+
+void PlayerComponent::Update()
+{
+    if (Engine::GetKeyDown(SDL_SCANCODE_T))
+    {
+        std::cout << "T pressed this frame!\n";
+        gameObject->x = xTeleportDestination;
+        gameObject->y = yTeleportDestination;
+    }
+}
+
+void SinMovement::Update()
+{
+    gameObject->x = (SDL_sinf(Engine::GetCurrentFrame() / 10.0f) * 100) + 200;
 }
 
 int main(int argc, char* argv[])
