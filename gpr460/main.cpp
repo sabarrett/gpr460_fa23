@@ -1,12 +1,16 @@
 
 #include <stdlib.h>
 #include <iostream>
+#include <fstream>
 #include <SDL2/SDL.h>
 #include "System.h"
 #include "StackAllocator.h"
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <cassert>
+
+#include "lua.hpp"
+
 
 class Engine
 {
@@ -49,10 +53,14 @@ public:
     static int GetKey(int keycode);
     static int GetKeyDown(int keycode);
 
+    void InitLua();
+    void CallLuaUpdate();
     void RunGameLoop(SDL_Renderer* renderer);
 
 private:
     static Engine* instance;
+
+    lua_State* L;
 
     Uint8* keysLastFrame;
     Uint8* keysThisFrame;
@@ -62,6 +70,107 @@ private:
 };
 
 Engine* Engine::instance;
+
+
+
+int LuaC_GetCurrentFrame(lua_State* L)
+{
+    // To return something to lua, push it onto the stack
+    lua_pushinteger(L, Engine::GetCurrentFrame());
+
+    // Then, return the number of items that you've returned.
+    // In this case, we returned a single integer, so we
+    // return 1.
+
+    return 1;
+}
+
+// Needed to remove "luac.c" and "lua.c"
+void Engine::InitLua()
+{
+    // First, we create the Lua interpreter
+    L = luaL_newstate();
+
+    // Make sure our interpreter could be created successfully
+    if (L == nullptr)
+    {
+        std::cerr << "Could not create lua interpreter\n";
+        return;
+    }
+
+    std::cout << "Successfully created lua interpreter\n";
+
+    // Set up standard libraries
+    luaL_openlibs(L);
+
+    // Now, we have a lua state and can ask it to do things!
+    if (luaL_dostring(L, "print(10 + 5)") == 1)
+    {
+        std::cerr << "Error calling luaL_dostring\n";
+    }
+
+    // Lua reads a string like "print(10 + 5)" and parses it.
+    // It turns it into a tree like:
+    // 
+    //        call_fn
+    //        /     \
+    //   "print"     +
+    //              / \
+    //            10   5
+
+    // Then, it executes the tree:
+    //    Add 10 and 5. Store that somewhere.
+    //    Call print. Pass it the stored value as an argument.
+
+    // When we invoke Lua, we'd like to skip the parsing step and go
+    // straight to the instructions. We want to write C(++) code that
+    // tells Lua to, e.g., add 10 and 5 and then call print.
+
+
+    lua_getglobal(L, "print");
+    // -> [ fn_print ]
+
+    lua_pushnumber(L, 10);
+    // -> [ 10, fn_print ]
+
+    lua_pushnumber(L, 5);
+    // -> [ 5, 10, fn_print ]
+
+    lua_arith(L, LUA_OPADD);
+    // Pop the top two values off the stack and adds them together.
+    // Pushes the result back onto the stack.
+    // -> [ 15, fn_print ]
+
+    // args:
+    //    Lua State
+    //    Number of parameters to pass to function (consumes parameters from the top)
+    //    Number of return values expected by function
+    //    Where in the stack is the function to call
+
+    // -> [ 15, fn_print ]
+    //      -1    -2
+    // Want to call function at location -2
+    // Want to pass 1 paramter (the thing on the top of the stack
+    // Print doesn't return a value so we pass 0 for the third argument
+    lua_pcall(L, 1, 0, -2);
+
+    std::fstream lua_file("init.lua");
+    std::string line;
+    std::getline(lua_file, line);
+    std::cout << "Read " << line << " from init.lua\n";
+
+    lua_CFunction getCurrentFrame = LuaC_GetCurrentFrame;
+
+    lua_register(L, "get_current_frame", getCurrentFrame);
+
+    luaL_dofile(L, "init.lua");
+}
+
+void Engine::CallLuaUpdate()
+{
+    lua_getglobal(L, "Update");
+    lua_pcall(L, 0, 0, -1);
+}
 
 int Engine::GetCurrentFrame() { return instance->frame; }
 
@@ -464,6 +573,8 @@ void VirtualAllocExamples()
 
 void Engine::RunGameLoop(SDL_Renderer* renderer)
 {
+    InitLua();
+
     SDL_Event event;
     bool quit = false;
     Uint32 frameStart = SDL_GetTicks64();
@@ -473,9 +584,6 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
     ComponentPool<PlayerComponent> playerComponents;
     ComponentPool<SinMovement> sinComponents;
 
-    VirtualAllocExamples();
-    return;
-
     //StackPolymorphismExample();
 
     //GameObject* gameObjects = levelAllocator.New()
@@ -483,7 +591,6 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
     // Initialize player object
     {
         GameObject& player = gameObjects[0];
-        // Heap allocations! Have to clean these up sometime :/
         player.playerComponent = playerComponents.New(&player);
         player.renderComponent = renderers.New(&player);
         player.x = 100;
@@ -510,8 +617,6 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
 
             if (event.type == SDL_KEYDOWN)
             {
-                // Don't delete this leak -- it will be used
-                //    to check your 
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                 {
                     quit = true;
@@ -533,6 +638,8 @@ void Engine::RunGameLoop(SDL_Renderer* renderer)
             playerComponents.Update();
 
             sinComponents.Update();
+
+            CallLuaUpdate();
 
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
             SDL_RenderClear(renderer);

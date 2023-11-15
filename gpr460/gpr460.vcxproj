@@ -88,7 +88,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)external\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)external\include;$(SolutionDir)external\lua;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -110,7 +110,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)external\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)external\include;$(SolutionDir)external\lua;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -132,7 +132,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)external\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)external\include;$(SolutionDir)external\lua;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -154,7 +154,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)external\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)external\include;$(SolutionDir)external\lua;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -171,6 +171,38 @@
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\external\lua\lapi.c" />
+    <ClCompile Include="..\external\lua\lauxlib.c" />
+    <ClCompile Include="..\external\lua\lbaselib.c" />
+    <ClCompile Include="..\external\lua\lcode.c" />
+    <ClCompile Include="..\external\lua\lcorolib.c" />
+    <ClCompile Include="..\external\lua\lctype.c" />
+    <ClCompile Include="..\external\lua\ldblib.c" />
+    <ClCompile Include="..\external\lua\ldebug.c" />
+    <ClCompile Include="..\external\lua\ldo.c" />
+    <ClCompile Include="..\external\lua\ldump.c" />
+    <ClCompile Include="..\external\lua\lfunc.c" />
+    <ClCompile Include="..\external\lua\lgc.c" />
+    <ClCompile Include="..\external\lua\linit.c" />
+    <ClCompile Include="..\external\lua\liolib.c" />
+    <ClCompile Include="..\external\lua\llex.c" />
+    <ClCompile Include="..\external\lua\lmathlib.c" />
+    <ClCompile Include="..\external\lua\lmem.c" />
+    <ClCompile Include="..\external\lua\loadlib.c" />
+    <ClCompile Include="..\external\lua\lobject.c" />
+    <ClCompile Include="..\external\lua\lopcodes.c" />
+    <ClCompile Include="..\external\lua\loslib.c" />
+    <ClCompile Include="..\external\lua\lparser.c" />
+    <ClCompile Include="..\external\lua\lstate.c" />
+    <ClCompile Include="..\external\lua\lstring.c" />
+    <ClCompile Include="..\external\lua\lstrlib.c" />
+    <ClCompile Include="..\external\lua\ltable.c" />
+    <ClCompile Include="..\external\lua\ltablib.c" />
+    <ClCompile Include="..\external\lua\ltm.c" />
+    <ClCompile Include="..\external\lua\lundump.c" />
+    <ClCompile Include="..\external\lua\lutf8lib.c" />
+    <ClCompile Include="..\external\lua\lvm.c" />
+    <ClCompile Include="..\external\lua\lzio.c" />
     <ClCompile Include="InheritanceFallsApart.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="System_Win.cpp" />
